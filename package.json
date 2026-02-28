@@ -1,23 +1,14 @@
 {
   "name": "cloudinary-backend",
   "version": "1.0.0",
-  "description": "Backend pour Cloudinary upload signé",
   "type": "module",
-  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "cors": "^2.8.5",
     "cloudinary": "^1.37.1",
-    "dotenv": "^16.3.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+    "cors": "^2.8.5",
+    "dotenv": "^16.1.0"
+  }
 }
