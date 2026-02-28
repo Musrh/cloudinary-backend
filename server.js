@@ -45,3 +45,7 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Server Cloudinary signé sur port ${PORT}`);
 });
+setInterval(() => {
+  console.log("Server still alive...");
+}, 10000);
+
