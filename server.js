@@ -1,84 +1,89 @@
+// index.js
 import express from "express";
 import admin from "firebase-admin";
-import fetch from "node-fetch"; // npm install node-fetch@2
+import { ApifyClient } from "apify-client";
 
 const app = express();
+app.use(express.json());
+
 const PORT = process.env.PORT || 3000;
 
-// 🔹 Init Firebase
-try {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
-} catch (err) {
-  console.error("Erreur Firebase initialization:", err);
-  process.exit(1);
-}
+// 🔹 Initialiser Firebase
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 const db = admin.firestore();
 
-// 🔹 Root test
-app.get("/", (req, res) => {
-  res.json({ message: "Backend API running", timestamp: new Date().toISOString() });
-});
-
-// 🔹 Endpoint pour mettre à jour ProductsExternes
-app.get("/update-products-external", async (req, res) => {
-  const keyword = req.query.keyword || "smartwatch";
-
+// 🔹 Fonction pour mettre à jour les produits externes depuis Apify
+async function updateExternalProducts(keyword = "smartwatch") {
   try {
-    console.log("Update ProductsExternes pour:", keyword);
+    const client = new ApifyClient({ token: process.env.APIFY_TOKEN });
 
-    const response = await fetch(
-      `https://aliexpress-datahub.p.rapidapi.com/item_search?keywords=${encodeURIComponent(keyword)}&page=1&limit=5`,
-      {
-        method: "GET",
-        headers: {
-          "x-rapidapi-host": "aliexpress-datahub.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPIDAPI_KEY
-        }
-      }
-    );
+    // Lance l'actor Amazon Product Search
+    const run = await client.actor("apify/amazon-product-search").call({
+      search: keyword,
+      maxItems: 5, // nombre de produits à récupérer
+    });
 
-    if (!response.ok) {
-      console.error("Erreur API AliExpress:", response.status, response.statusText);
-      return res.status(500).json({ error: "Erreur API AliExpress", status: response.status });
-    }
+    // Récupère les produits dans le dataset par défaut
+    const { items } = await client.dataset(run.defaultDatasetId).listItems();
 
-    const data = await response.json();
-    console.log("Données reçues:", data);
-
-    if (!data.result || !Array.isArray(data.result)) {
-      return res.status(200).json({ status: "ok", message: "Aucun produit reçu" });
+    if (!items || items.length === 0) {
+      console.log("Aucun produit récupéré depuis Apify");
+      return [];
     }
 
     const batch = db.batch();
 
-    data.result.forEach(item => {
-      const docRef = db.collection("ProductsExternes").doc(item.itemId); // id unique AliExpress
-      batch.set(docRef, {
-        nom: item.title,
-        prix: parseFloat(item.price) || 0,
-        image: item.imageUrl || item.image,
-        source: "AliExpress",
-        url: item.productUrl || item.url,
-        createdAt: new Date()
-      }, { merge: true });
+    items.forEach((item) => {
+      const docRef = db.collection("ProductsExternes").doc(item.asin || item.id);
+
+      batch.set(
+        docRef,
+        {
+          nom: item.title || "Produit",
+          prix: parseFloat(item.price) || 0,
+          image: item.image || "",
+          source: "Amazon",
+          url: item.url || "",
+        },
+        { merge: true }
+      );
     });
 
     await batch.commit();
-
-    res.json({ status: "ok", message: `${data.result.length} produits ajoutés ou mis à jour` });
+    console.log(`${items.length} produits externes mis à jour`);
+    return items;
   } catch (err) {
-    console.error("Erreur update:", err);
+    console.error("Erreur updateExternalProducts:", err.message);
+    throw err;
+  }
+}
+
+// 🔹 Endpoint pour lancer manuellement la mise à jour
+app.get("/update-products-external", async (req, res) => {
+  const keyword = req.query.keyword || "smartwatch";
+  try {
+    const produits = await updateExternalProducts(keyword);
+    res.json({
+      status: "ok",
+      message: `${produits.length} produits externes mis à jour pour "${keyword}"`,
+      sample: produits[0] || null,
+    });
+  } catch (err) {
     res.status(500).json({ error: "Erreur serveur", details: err.message });
   }
 });
 
-// 🔹 Gestion des crashs globaux
-process.on('uncaughtException', err => console.error("Uncaught Exception:", err));
-process.on('unhandledRejection', (reason, promise) => console.error("Unhandled Rejection:", promise, "reason:", reason));
+// 🔹 Endpoint test
+app.get("/", (req, res) => {
+  res.json({ message: "Welcome to Node.js API", status: "running" });
+});
 
 // 🔹 Start server
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
