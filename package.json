@@ -1,7 +1,6 @@
 {
   "name": "nodejs",
   "version": "1.0.0",
-  "type":"module",
   "description": "Node.js API pour MiniShop",
   "main": "server.js",
   "scripts": {
