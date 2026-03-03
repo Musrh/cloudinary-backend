@@ -1,4 +1,3 @@
-// index.js
 import express from "express";
 import admin from "firebase-admin";
 import { ApifyClient } from "apify-client";
@@ -12,50 +11,46 @@ const PORT = process.env.PORT || 3000;
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+  credential: admin.credential.cert(serviceAccount)
 });
 
 const db = admin.firestore();
 
-// 🔹 Fonction pour mettre à jour les produits externes depuis Apify
+// 🔹 Initialiser Apify
+const client = new ApifyClient({ token: process.env.APIFY_TOKEN });
+
+// 🔹 Fonction pour mettre à jour les produits externes
 async function updateExternalProducts(keyword = "smartwatch") {
   try {
-    const client = new ApifyClient({ token: process.env.APIFY_TOKEN });
-
-    // Lance l'actor Amazon Product Search
-    const run = await client.actor("apify/amazon-product-search").call({
+    const run = await client.actor("akash9078/amazon-search-scraper").call({
       search: keyword,
-      maxItems: 5, // nombre de produits à récupérer
+      maxItems: 10, // nombre de produits à récupérer
     });
 
-    // Récupère les produits dans le dataset par défaut
     const { items } = await client.dataset(run.defaultDatasetId).listItems();
 
     if (!items || items.length === 0) {
-      console.log("Aucun produit récupéré depuis Apify");
+      console.log("Aucun produit récupéré depuis l'actor Apify");
       return [];
     }
 
     const batch = db.batch();
 
     items.forEach((item) => {
-      const docRef = db.collection("ProductsExternes").doc(item.asin || item.id);
+      // Utiliser un ID unique pour Firestore, ex: ASIN ou URL
+      const docRef = db.collection("ProductsExternes").doc(item.asin || item.url);
 
-      batch.set(
-        docRef,
-        {
-          nom: item.title || "Produit",
-          prix: parseFloat(item.price) || 0,
-          image: item.image || "",
-          source: "Amazon",
-          url: item.url || "",
-        },
-        { merge: true }
-      );
+      batch.set(docRef, {
+        nom: item.title || "Produit Amazon",
+        prix: parseFloat(item.price) || 0,
+        image: item.image || null,
+        source: "Amazon",
+        url: item.url || "",
+      }, { merge: true });
     });
 
     await batch.commit();
-    console.log(`${items.length} produits externes mis à jour`);
+    console.log(`${items.length} produits externes mis à jour dans Firestore`);
     return items;
   } catch (err) {
     console.error("Erreur updateExternalProducts:", err.message);
@@ -63,27 +58,27 @@ async function updateExternalProducts(keyword = "smartwatch") {
   }
 }
 
-// 🔹 Endpoint pour lancer manuellement la mise à jour
+// 🔹 Endpoint GET pour lancer la mise à jour
 app.get("/update-products-external", async (req, res) => {
   const keyword = req.query.keyword || "smartwatch";
+
   try {
     const produits = await updateExternalProducts(keyword);
-    res.json({
+    res.send({
       status: "ok",
       message: `${produits.length} produits externes mis à jour pour "${keyword}"`,
-      sample: produits[0] || null,
+      produits,
     });
   } catch (err) {
-    res.status(500).json({ error: "Erreur serveur", details: err.message });
+    res.status(500).send({ status: "error", message: "Erreur serveur", details: err.message });
   }
 });
 
 // 🔹 Endpoint test
 app.get("/", (req, res) => {
-  res.json({ message: "Welcome to Node.js API", status: "running" });
+  res.send({ status: "running", message: "Bienvenue sur Node.js API" });
 });
 
-// 🔹 Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
