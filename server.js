@@ -6,24 +6,30 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 🔹 Init Firebase
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+try {
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+} catch (err) {
+  console.error("Erreur Firebase initialization:", err);
+  process.exit(1);
+}
 
 const db = admin.firestore();
 
-// 🔹 Root
+// 🔹 Root test
 app.get("/", (req, res) => {
-  res.json({ message: "API running", timestamp: new Date().toISOString() });
+  res.json({ message: "Backend API running", timestamp: new Date().toISOString() });
 });
 
-// 🔹 Update ProductsExternes
+// 🔹 Endpoint pour mettre à jour ProductsExternes
 app.get("/update-products-external", async (req, res) => {
   const keyword = req.query.keyword || "smartwatch";
 
   try {
+    console.log("Update ProductsExternes pour:", keyword);
+
     const response = await fetch(
       `https://aliexpress-datahub.p.rapidapi.com/item_search?keywords=${encodeURIComponent(keyword)}&page=1&limit=5`,
       {
@@ -35,16 +41,22 @@ app.get("/update-products-external", async (req, res) => {
       }
     );
 
+    if (!response.ok) {
+      console.error("Erreur API AliExpress:", response.status, response.statusText);
+      return res.status(500).json({ error: "Erreur API AliExpress", status: response.status });
+    }
+
     const data = await response.json();
+    console.log("Données reçues:", data);
 
     if (!data.result || !Array.isArray(data.result)) {
-      return res.json({ status: "error", message: "Aucun produit reçu", data });
+      return res.status(200).json({ status: "ok", message: "Aucun produit reçu" });
     }
 
     const batch = db.batch();
 
     data.result.forEach(item => {
-      const docRef = db.collection("ProductsExternes").doc(item.itemId);
+      const docRef = db.collection("ProductsExternes").doc(item.itemId); // id unique AliExpress
       batch.set(docRef, {
         nom: item.title,
         prix: parseFloat(item.price) || 0,
@@ -57,12 +69,16 @@ app.get("/update-products-external", async (req, res) => {
 
     await batch.commit();
 
-    res.json({ status: "ok", message: `${data.result.length} produits ajoutés` });
+    res.json({ status: "ok", message: `${data.result.length} produits ajoutés ou mis à jour` });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erreur serveur" });
+    console.error("Erreur update:", err);
+    res.status(500).json({ error: "Erreur serveur", details: err.message });
   }
 });
+
+// 🔹 Gestion des crashs globaux
+process.on('uncaughtException', err => console.error("Uncaught Exception:", err));
+process.on('unhandledRejection', (reason, promise) => console.error("Unhandled Rejection:", promise, "reason:", reason));
 
 // 🔹 Start server
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
