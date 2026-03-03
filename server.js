@@ -14,12 +14,12 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
-// 🔹 Root route
+// 🔹 Root
 app.get("/", (req, res) => {
   res.json({ message: "API running", timestamp: new Date().toISOString() });
 });
 
-// 🔹 Update external products
+// 🔹 Update ProductsExternes
 app.get("/update-products-external", async (req, res) => {
   const keyword = req.query.keyword || "smartwatch";
 
@@ -42,6 +42,7 @@ app.get("/update-products-external", async (req, res) => {
     }
 
     const batch = db.batch();
+
     data.result.forEach(item => {
       const docRef = db.collection("ProductsExternes").doc(item.itemId);
       batch.set(docRef, {
@@ -55,6 +56,7 @@ app.get("/update-products-external", async (req, res) => {
     });
 
     await batch.commit();
+
     res.json({ status: "ok", message: `${data.result.length} produits ajoutés` });
   } catch (err) {
     console.error(err);
