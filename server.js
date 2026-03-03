@@ -9,37 +9,31 @@ const PORT = process.env.PORT || 3000;
 
 // 🔹 Initialiser Firebase
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
-
 const db = admin.firestore();
 
 // 🔹 Initialiser Apify
 const client = new ApifyClient({ token: process.env.APIFY_TOKEN });
 
-// 🔹 Fonction pour mettre à jour les produits externes
-async function updateExternalProducts(keyword = "smartwatch") {
+// 🔹 Endpoint GET pour mise à jour produits externes
+app.get("/update-products-external", async (req, res) => {
+  const keyword = req.query.keyword || "smartwatch";
+  const logs = [];
   try {
     const run = await client.actor("akash9078/amazon-search-scraper").call({
       search: keyword,
-      maxItems: 10, // nombre de produits à récupérer
+      maxItems: 10,
     });
+    logs.push("Actor appelé avec succès");
 
     const { items } = await client.dataset(run.defaultDatasetId).listItems();
-
-    if (!items || items.length === 0) {
-      console.log("Aucun produit récupéré depuis l'actor Apify");
-      return [];
-    }
+    logs.push(`${items.length} produits récupérés de l'actor`);
 
     const batch = db.batch();
-
     items.forEach((item) => {
-      // Utiliser un ID unique pour Firestore, ex: ASIN ou URL
       const docRef = db.collection("ProductsExternes").doc(item.asin || item.url);
-
       batch.set(docRef, {
         nom: item.title || "Produit Amazon",
         prix: parseFloat(item.price) || 0,
@@ -48,37 +42,22 @@ async function updateExternalProducts(keyword = "smartwatch") {
         url: item.url || "",
       }, { merge: true });
     });
-
     await batch.commit();
-    console.log(`${items.length} produits externes mis à jour dans Firestore`);
-    return items;
-  } catch (err) {
-    console.error("Erreur updateExternalProducts:", err.message);
-    throw err;
-  }
-}
+    logs.push(`${items.length} produits ajoutés dans Firestore`);
 
-// 🔹 Endpoint GET pour lancer la mise à jour
-app.get("/update-products-external", async (req, res) => {
-  const keyword = req.query.keyword || "smartwatch";
-
-  try {
-    const produits = await updateExternalProducts(keyword);
-    res.send({
-      status: "ok",
-      message: `${produits.length} produits externes mis à jour pour "${keyword}"`,
-      produits,
-    });
+    res.send({ status: "ok", logs, produits: items });
   } catch (err) {
-    res.status(500).send({ status: "error", message: "Erreur serveur", details: err.message });
+    logs.push(`Erreur: ${err.message}`);
+    res.status(500).send({ status: "error", logs, message: "Erreur serveur" });
   }
 });
 
-// 🔹 Endpoint test
+// 🔹 Endpoint test pour vérifier le serveur
 app.get("/", (req, res) => {
   res.send({ status: "running", message: "Bienvenue sur Node.js API" });
 });
 
+// 🔹 Démarrer le serveur
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
