@@ -14,13 +14,15 @@ const PORT = process.env.PORT || 3000;
 
 // ----------------------------
 // Middlewares
-// ----------------------------
 app.use(express.json());
 
-// ⚠️ Autoriser uniquement ton front GitHub Pages
+// ⚠️ CORS pour front + Railway Healthcheck
 app.use(
   cors({
-    origin: "https://wellshoppings.com", // adapte à ton front
+    origin: [
+      "https://wellshoppings.com",          // ton front
+      "https://healthcheck.railway.app"     // Railway healthcheck
+    ],
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type"],
   })
@@ -33,7 +35,7 @@ admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
 
 // ----------------------------
-// Healthcheck rapide pour Railway
+// Healthcheck rapide
 app.get("/health", (req, res) => {
   console.log("Healthcheck pinged at", new Date().toISOString());
   res.status(200).json({ status: "ok" });
@@ -64,7 +66,6 @@ app.get("/import-products", async (req, res) => {
     });
 
     await batch.commit();
-
     res.send({ status: "ok", message: products.length + " produits importés" });
   } catch (err) {
     res.status(500).send({ status: "error", message: err.message });
