@@ -56,6 +56,13 @@ app.get("/import-products", async (req, res) => {
   }
 });
 
+// ----------------------------
+// HEALTH CHECK
+// ----------------------------
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
 app.listen(PORT, () => {
   console.log("Server running on port", PORT);
 });
