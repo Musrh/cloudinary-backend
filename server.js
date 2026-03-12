@@ -1,4 +1,3 @@
-
 // server.js
 import express from "express";
 import cors from "cors";
@@ -15,7 +14,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ----------------------------
-// Security headers
+// Healthcheck ultra rapide (Railway)
+app.get("/health", (req, res) => {
+  console.log("✅ Healthcheck pinged at", new Date().toISOString());
+  res.send("ok"); // simple texte
+});
+
+// ----------------------------
+// Sécurité headers
 app.use(helmet());
 
 // ----------------------------
@@ -39,13 +45,6 @@ app.use(
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
-
-// ----------------------------
-// Healthcheck rapide
-app.get("/health", (req, res) => {
-  console.log("✅ Healthcheck pinged at", new Date().toISOString());
-  res.status(200).send("ok"); // texte simple
-});
 
 // ----------------------------
 // Racine simple pour navigateur
@@ -165,5 +164,5 @@ app.post("/capture-paypal-order", async (req, res) => {
 });
 
 // ----------------------------
-// Start server avec PORT Railway
+// Start server
 app.listen(PORT, () => console.log(`🚀 Backend payments running on port ${PORT}`));
