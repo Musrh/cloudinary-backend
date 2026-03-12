@@ -27,20 +27,21 @@ app.use(
 );
 
 // ----------------------------
-// Firebase (normal)
+// Firebase
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
 
 // ----------------------------
-// Healthcheck ultra rapide
+// Healthcheck rapide pour Railway
 app.get("/health", (req, res) => {
+  console.log("Healthcheck pinged at", new Date().toISOString());
   res.status(200).json({ status: "ok" });
 });
 
 // ----------------------------
-// Racine simple pour test
-app.get("/", (req, res) => res.send("Backend payments running ✅"));
+// Racine simple pour navigateur
+app.get("/", (req, res) => res.send("Stripe & PayPal backend is running 🚀"));
 
 // ----------------------------
 // Import produits FakeStoreAPI
