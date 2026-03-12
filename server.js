@@ -1,3 +1,4 @@
+// server.js
 import express from "express";
 import cors from "cors";
 import Stripe from "stripe";
@@ -17,44 +18,32 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // ⚠️ Autoriser uniquement ton front GitHub Pages
-app.use(cors({
-  origin: "https://wellshoppings.com", 
-  methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type"],
-}));
+app.use(
+  cors({
+    origin: "https://wellshoppings.com", // adapte à ton front
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type"],
+  })
+);
 
 // ----------------------------
-// Firebase
-// ----------------------------
+// Firebase (normal)
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
 
 // ----------------------------
-// Stripe
-// ----------------------------
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Healthcheck ultra rapide
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
 
 // ----------------------------
-// PayPal
-const paypalEnv =
-  process.env.PAYPAL_ENV === "live"
-    ? new paypal.core.LiveEnvironment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_SECRET)
-    : new paypal.core.SandboxEnvironment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_SECRET);
-
-const paypalClient = new paypal.core.PayPalHttpClient(paypalEnv);
-
-// ----------------------------
-// ROUTES
-// ----------------------------
-
-// racine
+// Racine simple pour test
 app.get("/", (req, res) => res.send("Backend payments running ✅"));
 
-// health check
-app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
-
-// import produits externes
+// ----------------------------
+// Import produits FakeStoreAPI
 app.get("/import-products", async (req, res) => {
   try {
     const response = await axios.get("https://fakestoreapi.com/products");
@@ -82,19 +71,17 @@ app.get("/import-products", async (req, res) => {
 });
 
 // ----------------------------
-// Stripe checkout session
-// ----------------------------
+// Stripe lazy init
+let stripe;
 app.post("/create-stripe-session", async (req, res) => {
+  if (!stripe) stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
   const items = req.body.items || [];
   try {
     const line_items = items.map((i) => ({
       price_data: {
         currency: "eur",
-        product_data: {
-          name: i.nom,
-          description: i.description || "Produit WellShoppings",
-          images: [i.image || "/placeholder.png"],
-        },
+        product_data: { name: i.nom, images: [i.image || "/placeholder.png"] },
         unit_amount: i.prix * 100,
       },
       quantity: i.quantity,
@@ -117,18 +104,23 @@ app.post("/create-stripe-session", async (req, res) => {
 });
 
 // ----------------------------
-// PayPal order
-// ----------------------------
+// PayPal lazy init
+let paypalClient;
 app.post("/create-paypal-order", async (req, res) => {
+  if (!paypalClient) {
+    const env =
+      process.env.PAYPAL_ENV === "live"
+        ? new paypal.core.LiveEnvironment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_SECRET)
+        : new paypal.core.SandboxEnvironment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_SECRET);
+    paypalClient = new paypal.core.PayPalHttpClient(env);
+  }
+
   const items = req.body.items || [];
   const total = items.reduce((sum, i) => sum + i.prix * i.quantity, 0).toFixed(2);
 
   const request = new paypal.orders.OrdersCreateRequest();
   request.prefer("return=representation");
-  request.requestBody({
-    intent: "CAPTURE",
-    purchase_units: [{ amount: { currency_code: "EUR", value: total } }],
-  });
+  request.requestBody({ intent: "CAPTURE", purchase_units: [{ amount: { currency_code: "EUR", value: total } }] });
 
   try {
     const order = await paypalClient.execute(request);
@@ -139,9 +131,6 @@ app.post("/create-paypal-order", async (req, res) => {
   }
 });
 
-// ----------------------------
-// PayPal capture
-// ----------------------------
 app.post("/capture-paypal-order", async (req, res) => {
   const { orderId, user, items } = req.body;
   try {
@@ -168,5 +157,5 @@ app.post("/capture-paypal-order", async (req, res) => {
 });
 
 // ----------------------------
-// Start server
+// Start server avec PORT Railway
 app.listen(PORT, () => console.log(`🚀 Backend payments running on port ${PORT}`));
