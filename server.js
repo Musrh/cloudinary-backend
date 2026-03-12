@@ -1,9 +1,13 @@
 import express from "express";
 import admin from "firebase-admin";
 import axios from "axios";
+import cors from "cors";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+app.use(cors({ origin: "https://wellshoppings.com" }));
 
 // Firebase
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -14,10 +18,13 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
+// ----------------------------
+// IMPORT PRODUCTS
+// ----------------------------
 app.get("/import-products", async (req, res) => {
+
   try {
 
-    // appel API
     const response = await axios.get("https://fakestoreapi.com/products");
 
     const products = response.data;
@@ -54,6 +61,7 @@ app.get("/import-products", async (req, res) => {
     });
 
   }
+
 });
 
 // ----------------------------
@@ -63,6 +71,7 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
 
+// ----------------------------
 app.listen(PORT, () => {
   console.log("Server running on port", PORT);
 });
